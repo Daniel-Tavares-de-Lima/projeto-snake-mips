@@ -1,6 +1,6 @@
 # ============================================================
 # Projeto SNAKE - Assembly MIPS (MARS)
-# Passo 1: configurar o Bitmap Display e desenhar celulas
+# Passo 2: estado do jogo na memoria (cobra e comida) + desenho
 # ============================================================
 # Configurar em Tools > Bitmap Display:
 #   Unit Width in Pixels:     16
@@ -20,28 +20,69 @@
 # IMPORTANTE: o display ocupa 0x10010000..0x10010FFF.
 # Por isso ele tem que ser a PRIMEIRA coisa do .data; as outras
 # variaveis do jogo vem depois dele, senao o jogo "pinta" as proprias variaveis.
-display: .space 4096
+display:  .space 4096
+
+# --- estado do jogo ---
+# A cobra e guardada em dois vetores: cobra_x[i] e cobra_y[i].
+# O indice 0 e a CABECA; o ultimo indice (tamanho-1) e a CAUDA.
+# Maximo de celulas da cobra = 32*32 = 1024 (tabuleiro cheio).
+tamanho:  .word 1               # a cobra comeca com 1 celula
+cobra_x:  .word 0               # cabeca em (0,0) - canto superior esquerdo
+          .space 4092           # resto do vetor (1023 posicoes * 4 bytes)
+cobra_y:  .word 0
+          .space 4092
+comida_x: .word 5               # comida fixa por enquanto (vira aleatoria depois)
+comida_y: .word 7
 
 .text
 main:
-    # desenha a cabeca da cobra em (0,0) - canto superior esquerdo
-    li   $a0, 0                 # x
-    li   $a1, 0                 # y
-    li   $a2, COR_COBRA         # cor
-    jal  desenha_celula
-
-    # desenha uma comida de teste em (5,7)
-    li   $a0, 5
-    li   $a1, 7
-    li   $a2, COR_COMIDA
-    jal  desenha_celula
+    jal  desenha_cobra
+    jal  desenha_comida
 
     li   $v0, 10                # syscall 10 = encerrar programa
     syscall
 
 # ------------------------------------------------------------
+# desenha_cobra: percorre os vetores e pinta as 'tamanho' celulas
+#   for (i = 0; i < tamanho; i++) desenha_celula(cobra_x[i], cobra_y[i], AZUL)
+# Como chama outra funcao (jal), precisa salvar $ra na pilha.
+# ------------------------------------------------------------
+desenha_cobra:
+    addiu $sp, $sp, -4          # abre espaco na pilha
+    sw    $ra, 0($sp)           # guarda o endereco de retorno
+
+    lw    $t2, tamanho          # $t2 = quantas celulas pintar
+    li    $t3, 0                # $t3 = i (indice, comeca em 0)
+loop_cobra:
+    beq   $t3, $t2, fim_cobra   # i == tamanho? terminou
+    sll   $t4, $t3, 2           # deslocamento em bytes = i * 4
+    lw    $a0, cobra_x($t4)     # x = cobra_x[i]
+    lw    $a1, cobra_y($t4)     # y = cobra_y[i]
+    li    $a2, COR_COBRA
+    jal   desenha_celula        # (desenha_celula so mexe em $t0 e $t1)
+    addiu $t3, $t3, 1           # i++
+    j     loop_cobra
+fim_cobra:
+    lw    $ra, 0($sp)           # recupera o endereco de retorno
+    addiu $sp, $sp, 4           # fecha o espaco da pilha
+    jr    $ra
+
+# ------------------------------------------------------------
+# desenha_comida: pinta a celula (comida_x, comida_y) de verde.
+# So faz um jal no final, entao usamos 'j' (tail call) e nao
+# precisamos salvar $ra: o 'jr $ra' de desenha_celula volta direto
+# para quem chamou desenha_comida.
+# ------------------------------------------------------------
+desenha_comida:
+    lw    $a0, comida_x
+    lw    $a1, comida_y
+    li    $a2, COR_COMIDA
+    j     desenha_celula
+
+# ------------------------------------------------------------
 # desenha_celula(x=$a0, y=$a1, cor=$a2)
 # endereco = display + (y*32 + x) * 4
+# Usa apenas $t0 e $t1.
 # ------------------------------------------------------------
 desenha_celula:
     sll  $t0, $a1, 5            # y * 32   (deslocar 5 bits = multiplicar por 32)
