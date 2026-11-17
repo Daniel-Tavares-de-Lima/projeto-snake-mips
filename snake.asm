@@ -1,9 +1,10 @@
 # ============================================================
 # Projeto SNAKE - Assembly MIPS (MARS)
-# Passo 3: leitura do teclado (WASD) via MMIO -> guarda a direcao
 # ============================================================
-# Tambem abrir Tools > Keyboard and Display MMIO Simulator,
-# clicar em "Connect to MIPS" e digitar W/A/S/D na caixa de baixo
+# Abrir DUAS ferramentas (Tools) e clicar em "Connect to MIPS" em cada:
+#   - Bitmap Display (configuracao abaixo)
+#   - Keyboard and Display MMIO Simulator
+# Jogar digitando W/A/S/D na caixa de baixo do simulador de teclado
 # (a caixa "KEYBOARD" precisa estar com o foco para receber as teclas).
 #
 # Configurar em Tools > Bitmap Display:
@@ -19,6 +20,8 @@
 
 .eqv COR_COBRA 0x000000FF       # azul  (cobra, como na especificacao)
 .eqv COR_COMIDA 0x0000FF00      # verde (comida, como na especificacao)
+.eqv COR_FUNDO 0x00000000       # preto (usado para apagar a cauda)
+.eqv PASSO_MS 500               # a cobra anda a cada 500 ms = 0,5 s
 .eqv KBD_CTRL 0xFFFF0000        # bit 0 = 1 quando ha uma tecla esperando
 .eqv KBD_DATA 0xFFFF0004        # codigo ASCII da tecla (ler limpa o bit 0)
 
@@ -50,26 +53,89 @@ main:
     jal  desenha_cobra
     jal  desenha_comida
 
-# TESTE do passo 3: fica lendo o teclado e imprime a direcao no
-# console (Run I/O) sempre que uma tecla valida for apertada.
-# Para parar, use o botao Stop do MARS. Sera substituido no passo 4.
+# Laco principal. O programa NAO dorme 0,5 s (senao perderia as teclas):
+# ele roda o tempo todo lendo o teclado e so move a cobra quando o
+# relogio passa do instante guardado em $s0.
+#   $s0 = instante (em ms) do proximo movimento
+    li   $v0, 30                # syscall 30 = tempo do sistema em ms
+    syscall                     # retorna a parte baixa (32 bits) em $a0
+    addiu $s0, $a0, PASSO_MS    # proximo movimento daqui a 500 ms
 loop_jogo:
-    jal  ler_teclado
-    beqz $v0, loop_jogo         # nenhuma tecla valida: tenta de novo
+    jal  ler_teclado            # atualiza dir_x/dir_y se apertou WASD
 
-    lw   $a0, dir_x
-    li   $v0, 1                 # syscall 1 = imprimir inteiro
-    syscall
-    li   $a0, 32                # 32 = ' '
-    li   $v0, 11                # syscall 11 = imprimir caractere
-    syscall
-    lw   $a0, dir_y
-    li   $v0, 1
-    syscall
-    li   $a0, 10                # 10 = '\n'
-    li   $v0, 11
-    syscall
+    li   $v0, 30
+    syscall                     # $a0 = agora (ms)
+    subu $t0, $a0, $s0          # agora - proximo (com sinal: aguenta overflow)
+    bltz $t0, loop_jogo         # negativo = ainda nao deu 0,5 s: volta a ler
+
+    addiu $s0, $a0, PASSO_MS    # agenda o proximo movimento (agora + 500 ms)
+    jal  mover_cobra
     j    loop_jogo
+
+# ------------------------------------------------------------
+# mover_cobra: da um passo na direcao (dir_x, dir_y).
+#   1) calcula a nova cabeca = cabeca atual + direcao
+#   2) apaga a cauda no display
+#   3) desloca o vetor: cobra[i] = cobra[i-1], da cauda ate o indice 1
+#   4) grava a nova cabeca em cobra[0] e desenha
+# Nao anda se a direcao for (0,0) (nenhuma tecla apertada ainda).
+# TEMPORARIO: se a nova cabeca sair da grade, a cobra apenas nao anda
+# (se deixasse, o sw escreveria fora do display e estragaria a memoria).
+# No passo 5 isso vira "game over".
+# Registradores: $t5/$t6 = nova cabeca (desenha_celula nao mexe neles).
+# ------------------------------------------------------------
+mover_cobra:
+    addiu $sp, $sp, -4
+    sw    $ra, 0($sp)
+
+    lw    $t0, dir_x
+    lw    $t1, dir_y
+    or    $t2, $t0, $t1         # 0 so se dir_x == 0 e dir_y == 0
+    beqz  $t2, fim_mover        # parada: nada a fazer
+
+    lw    $t2, cobra_x          # cabeca atual (indice 0)
+    lw    $t3, cobra_y
+    addu  $t5, $t2, $t0         # nova x = x + dir_x
+    addu  $t6, $t3, $t1         # nova y = y + dir_y
+
+    # dentro da grade? 0 <= nova < 32. Truque: comparando SEM sinal,
+    # um numero negativo vira um numero enorme e tambem falha o teste.
+    sltiu $t2, $t5, 32          # t2 = 1 se (unsigned) nova_x < 32
+    beqz  $t2, fim_mover
+    sltiu $t2, $t6, 32
+    beqz  $t2, fim_mover
+
+    # apaga a cauda (ultimo indice = tamanho - 1)
+    lw    $t4, tamanho
+    addiu $t4, $t4, -1          # t4 = indice da cauda
+    sll   $t7, $t4, 2
+    lw    $a0, cobra_x($t7)
+    lw    $a1, cobra_y($t7)
+    li    $a2, COR_FUNDO
+    jal   desenha_celula
+
+    # desloca o corpo: for (i = cauda; i > 0; i--) cobra[i] = cobra[i-1]
+loop_desloca:
+    blez  $t4, fim_desloca      # i <= 0: terminou
+    sll   $t7, $t4, 2           # t7 = i * 4
+    addiu $t8, $t7, -4          # t8 = (i-1) * 4
+    lw    $t9, cobra_x($t8)
+    sw    $t9, cobra_x($t7)     # cobra_x[i] = cobra_x[i-1]
+    lw    $t9, cobra_y($t8)
+    sw    $t9, cobra_y($t7)     # cobra_y[i] = cobra_y[i-1]
+    addiu $t4, $t4, -1
+    j     loop_desloca
+fim_desloca:
+    sw    $t5, cobra_x          # nova cabeca em cobra[0]
+    sw    $t6, cobra_y
+    move  $a0, $t5
+    move  $a1, $t6
+    li    $a2, COR_COBRA
+    jal   desenha_celula        # desenha so a cabeca nova
+fim_mover:
+    lw    $ra, 0($sp)
+    addiu $sp, $sp, 4
+    jr    $ra
 
 # ------------------------------------------------------------
 # ler_teclado -> $v0 = 1 se uma tecla W/A/S/D foi lida (e dir_x/dir_y
