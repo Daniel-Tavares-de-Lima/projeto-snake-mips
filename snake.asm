@@ -47,6 +47,9 @@ comida_y: .word 7
 # Atencao: o eixo y cresce PARA BAIXO, entao "cima" e y = -1.
 dir_x:    .word 0
 dir_y:    .word 0
+pontos:   .word 0               # +1 a cada 0,5 s e +5 a cada comida
+msg_fim:  .asciiz "\n=== GAME OVER ===\nPontuacao final: "
+msg_nl:   .asciiz "\n"
 
 .text
 main:
@@ -69,8 +72,31 @@ loop_jogo:
     bltz $t0, loop_jogo         # negativo = ainda nao deu 0,5 s: volta a ler
 
     addiu $s0, $a0, PASSO_MS    # agenda o proximo movimento (agora + 500 ms)
-    jal  mover_cobra
+
+    lw   $t0, pontos            # a cada 0,5 s a pontuacao sobe 1 ponto
+    addiu $t0, $t0, 1
+    sw   $t0, pontos
+
+    jal  mover_cobra            # (se bater, mover_cobra pula para game_over)
     j    loop_jogo
+
+# ------------------------------------------------------------
+# game_over: mostra a pontuacao final no console (Run I/O) e encerra.
+# Nunca retorna, entao quem chega aqui com 'j' nao precisa se
+# preocupar com a pilha nem com $ra.
+# ------------------------------------------------------------
+game_over:
+    la   $a0, msg_fim
+    li   $v0, 4                 # syscall 4 = imprimir string
+    syscall
+    lw   $a0, pontos
+    li   $v0, 1                 # syscall 1 = imprimir inteiro
+    syscall
+    la   $a0, msg_nl
+    li   $v0, 4
+    syscall
+    li   $v0, 10                # syscall 10 = encerrar o programa
+    syscall
 
 # ------------------------------------------------------------
 # mover_cobra: da um passo na direcao (dir_x, dir_y).
@@ -79,9 +105,9 @@ loop_jogo:
 #   3) desloca o vetor: cobra[i] = cobra[i-1], da cauda ate o indice 1
 #   4) grava a nova cabeca em cobra[0] e desenha
 # Nao anda se a direcao for (0,0) (nenhuma tecla apertada ainda).
-# TEMPORARIO: se a nova cabeca sair da grade, a cobra apenas nao anda
-# (se deixasse, o sw escreveria fora do display e estragaria a memoria).
-# No passo 5 isso vira "game over".
+# Se a nova cabeca sair da grade (bateu na parede) -> game over.
+# Esse teste vem ANTES de desenhar: se desenhasse fora da grade, o sw
+# escreveria fora do display e estragaria as variaveis.
 # Registradores: $t5/$t6 = nova cabeca (desenha_celula nao mexe neles).
 # ------------------------------------------------------------
 mover_cobra:
@@ -101,9 +127,9 @@ mover_cobra:
     # dentro da grade? 0 <= nova < 32. Truque: comparando SEM sinal,
     # um numero negativo vira um numero enorme e tambem falha o teste.
     sltiu $t2, $t5, 32          # t2 = 1 se (unsigned) nova_x < 32
-    beqz  $t2, fim_mover
+    beqz  $t2, game_over        # 0 = fora da grade: bateu na parede
     sltiu $t2, $t6, 32
-    beqz  $t2, fim_mover
+    beqz  $t2, game_over
 
     # apaga a cauda (ultimo indice = tamanho - 1)
     lw    $t4, tamanho
