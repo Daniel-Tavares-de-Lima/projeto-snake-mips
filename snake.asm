@@ -40,8 +40,8 @@ cobra_x:  .word 0               # cabeca em (0,0) - canto superior esquerdo
           .space 4092           # resto do vetor (1023 posicoes * 4 bytes)
 cobra_y:  .word 0
           .space 4092
-comida_x: .word 5               # comida fixa por enquanto (vira aleatoria depois)
-comida_y: .word 7
+comida_x: .word 0               # posicao da comida (sorteada por nova_comida)
+comida_y: .word 0
 # direcao atual = quanto a cabeca anda em x e em y a cada passo.
 # (0,0) = parada (ainda nao apertou nenhuma tecla).
 # Atencao: o eixo y cresce PARA BAIXO, entao "cima" e y = -1.
@@ -53,8 +53,8 @@ msg_nl:   .asciiz "\n"
 
 .text
 main:
-    jal  desenha_cobra
-    jal  desenha_comida
+    jal  desenha_cobra          # primeiro a cobra: nova_comida evita celulas ocupadas
+    jal  nova_comida            # sorteia e desenha a primeira comida
 
 # Laco principal. O programa NAO dorme 0,5 s (senao perderia as teclas):
 # ele roda o tempo todo lendo o teclado e so move a cobra quando o
@@ -131,14 +131,26 @@ mover_cobra:
     sltiu $t2, $t6, 32
     beqz  $t2, game_over
 
-    # apaga a cauda (ultimo indice = tamanho - 1)
+    # a nova cabeca caiu na comida?
+    lw    $t2, comida_x
+    lw    $t3, comida_y
     lw    $t4, tamanho
-    addiu $t4, $t4, -1          # t4 = indice da cauda
-    sll   $t7, $t4, 2
+    bne   $t5, $t2, sem_comer
+    bne   $t6, $t3, sem_comer
+    # COMEU: nao apaga a cauda, entao a cobra cresce 1 celula.
+    addiu $t4, $t4, 1
+    sw    $t4, tamanho          # tamanho++
+    j     prepara_desloca
+sem_comer:
+    # nao comeu: apaga a cauda (ultimo indice = tamanho - 1)
+    addiu $t7, $t4, -1
+    sll   $t7, $t7, 2
     lw    $a0, cobra_x($t7)
     lw    $a1, cobra_y($t7)
     li    $a2, COR_FUNDO
     jal   desenha_celula
+prepara_desloca:
+    addiu $t4, $t4, -1          # t4 = indice da cauda (ja com o tamanho novo)
 
     # desloca o corpo: for (i = cauda; i > 0; i--) cobra[i] = cobra[i-1]
 loop_desloca:
@@ -158,6 +170,16 @@ fim_desloca:
     move  $a1, $t6
     li    $a2, COR_COBRA
     jal   desenha_celula        # desenha so a cabeca nova
+
+    # se a cabeca esta em cima da comida, ela acabou de ser comida
+    lw    $t2, comida_x
+    lw    $t3, comida_y
+    bne   $t5, $t2, fim_mover
+    bne   $t6, $t3, fim_mover
+    lw    $t0, pontos
+    addiu $t0, $t0, 5           # +5 pontos por comida
+    sw    $t0, pontos
+    jal   nova_comida
 fim_mover:
     lw    $ra, 0($sp)
     addiu $sp, $sp, 4
@@ -235,14 +257,43 @@ fim_cobra:
     jr    $ra
 
 # ------------------------------------------------------------
-# desenha_comida: pinta a celula (comida_x, comida_y) de verde.
+# nova_comida: sorteia uma celula LIVRE, guarda em comida_x/comida_y
+# e pinta de verde.
+# Syscall 42 = inteiro aleatorio em [0, $a1): $a0 = id do gerador
+# (0), $a1 = limite; o resultado volta em $a0.
+# "Livre" = o pixel do display naquela celula ainda e preto (COR_FUNDO),
+# ou seja, nao tem cobra em cima. Se nao for, sorteia de novo.
+# ponytail: se o tabuleiro encher (cobra com 1024 celulas) isso nunca
+# termina; trate como "vitoria" se quiser.
 # So faz um jal no final, entao usamos 'j' (tail call) e nao
 # precisamos salvar $ra: o 'jr $ra' de desenha_celula volta direto
-# para quem chamou desenha_comida.
+# para quem chamou nova_comida.
 # ------------------------------------------------------------
-desenha_comida:
-    lw    $a0, comida_x
-    lw    $a1, comida_y
+nova_comida:
+sorteia:
+    li    $a0, 0
+    li    $a1, 32
+    li    $v0, 42
+    syscall
+    move  $t0, $a0              # t0 = x sorteado (0..31)
+    li    $a0, 0
+    li    $a1, 32
+    li    $v0, 42
+    syscall
+    move  $t1, $a0              # t1 = y sorteado (0..31)
+
+    sll   $t2, $t1, 5           # mesmo calculo de endereco de desenha_celula
+    addu  $t2, $t2, $t0
+    sll   $t2, $t2, 2
+    la    $t3, display
+    addu  $t2, $t2, $t3
+    lw    $t4, 0($t2)           # cor atual da celula
+    bnez  $t4, sorteia          # diferente de preto: ocupada, sorteia outra
+
+    sw    $t0, comida_x
+    sw    $t1, comida_y
+    move  $a0, $t0
+    move  $a1, $t1
     li    $a2, COR_COMIDA
     j     desenha_celula
 
