@@ -78,7 +78,7 @@ loop_jogo:
 
     jal  mover_cobra            # se bater, ela mesma pula pra game_over
     j    loop_jogo
-
+##---
 # ------------------------------------------------------------
 # game_over: imprime a pontuacao e encerra o programa.
 # Ninguem volta daqui, entao quem pula pra ca nao precisa mexer na pilha.
