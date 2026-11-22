@@ -1,46 +1,44 @@
-# Projeto SNAKE (Assembly MIPS)
+# Projeto SNAKE
 
-Jogo da cobrinha (Snake) em Assembly MIPS para o simulador MARS 4.5.
-Entrada pelo teclado (W/A/S/D) e saida no Bitmap Display do MARS.
+Jogo da cobrinha feito em Assembly MIPS pro trabalho de AOC. Roda no MARS 4.5: o teclado (W A S D) é a entrada e o Bitmap Display é a saída.
 
 ## Como rodar
 
-1. Abra o `snake.asm` no MARS.
-2. Em **Tools > Bitmap Display**, configure:
+1. Abre o `snake.asm` no MARS.
+2. Em Tools > Bitmap Display, configura assim:
+   - Unit Width in Pixels: 16
+   - Unit Height in Pixels: 16
+   - Display Width in Pixels: 512
+   - Display Height in Pixels: 512
+   - Base address for display: `0x10010000 (static data)`
 
-   | Campo | Valor |
-   |---|---|
-   | Unit Width in Pixels | 16 |
-   | Unit Height in Pixels | 16 |
-   | Display Width in Pixels | 512 |
-   | Display Height in Pixels | 512 |
-   | Base address for display | `0x10010000 (static data)` |
+   Depois clica em Connect to MIPS.
+3. Em Tools > Keyboard and Display MMIO Simulator, clica em Connect to MIPS também.
+4. Monta (F3) e roda (F5).
+5. Clica na caixa KEYBOARD do simulador de teclado e joga com W A S D.
 
-   Clique em **Connect to MIPS**.
-3. Em **Tools > Keyboard and Display MMIO Simulator**, clique em **Connect to MIPS**.
-4. Monte (F3) e rode (F5).
-5. Clique na caixa **KEYBOARD** do simulador de teclado e jogue com W/A/S/D.
-6. A pontuacao final aparece na aba **Run I/O** quando o jogo termina.
+A pontuação final aparece na aba Run I/O quando o jogo acaba.
+
+Se o Bitmap Display ficar cortado na tela, estica a janela pra baixo até a área preta ficar quadrada. Isso acontece quando muda a altura pra 512 e a janela não acompanha.
 
 ## Regras
 
-- A cobra (azul) comeca com 1 celula em (0,0), parada ate a primeira tecla.
-- W = cima, A = esquerda, S = baixo, D = direita. A cada 0,5 s ela anda 1 celula na ultima direcao.
-- Ao pegar a comida (verde), a cobra cresce 1 celula e a comida reaparece em outra celula livre.
-- Pontuacao: +1 a cada 0,5 s e +5 a cada comida.
-- Fim de jogo: bater na parede ou em qualquer parte do proprio corpo (inclusive voltar na direcao oposta).
+A cobra (azul) começa com 1 célula em (0,0) e fica parada até a primeira tecla. W é cima, A é esquerda, S é baixo e D é direita. A cada 0,5 s ela anda 1 célula na última direção escolhida.
 
-## Como o codigo esta organizado
+Quando pega a comida (verde), a cobra cresce 1 célula e a comida aparece em outra célula livre. Cada passo vale 1 ponto e cada comida vale 5.
 
-| Rotina | O que faz |
-|---|---|
-| `main` / `loop_jogo` | Laco principal: le o teclado o tempo todo e move a cobra a cada 500 ms (syscall 30) |
-| `ler_teclado` | Polling do teclado MMIO (`0xFFFF0000`) e atualizacao da direcao |
-| `mover_cobra` | Nova cabeca, colisoes, crescimento, deslocamento do corpo e pontuacao |
-| `nova_comida` | Sorteia (syscall 42) uma celula livre e desenha a comida |
-| `desenha_cobra`, `desenha_celula` | Pintam as celulas no Bitmap Display |
-| `game_over` | Imprime a pontuacao final e encerra |
+O jogo acaba se a cabeça bater na parede ou em qualquer parte do corpo. Voltar na direção oposta conta, porque a cabeça entra no próprio corpo.
 
-O tabuleiro e uma grade de 32 x 32 celulas (512 / 16). Cada celula e uma palavra de 4 bytes no
-Bitmap Display, que fica no inicio do `.data`. O proprio display tambem e usado como mapa de
-ocupacao (celula azul = corpo da cobra, preta = livre).
+## O código
+
+O tabuleiro tem 32 x 32 células (512 / 16), e cada célula é uma word do Bitmap Display. Por isso o display é a primeira coisa do `.data`, que começa no mesmo endereço, `0x10010000`. As outras variáveis ficam depois dele pra não serem sobrescritas. A cobra fica em dois vetores, `cobra_x` e `cobra_y`, com a cabeça no índice 0.
+
+As rotinas:
+- `main` e `loop_jogo`: o loop lê o teclado o tempo todo e só move a cobra quando passam 500 ms (syscall 30), pra não perder tecla.
+- `ler_teclado`: faz polling no teclado do MARS (`0xFFFF0000`) e atualiza a direção.
+- `mover_cobra`: calcula a nova cabeça, confere as colisões, trata a comida, empurra o corpo e soma os pontos.
+- `nova_comida`: sorteia uma célula livre com a syscall 42 e desenha a comida.
+- `desenha_cobra` e `desenha_celula`: pintam as células no display.
+- `game_over`: imprime a pontuação final e encerra.
+
+Pra saber se uma célula tem cobra, o código lê a cor que o display já guarda nela. Azul é corpo e preto é livre, então não precisa percorrer o vetor.
