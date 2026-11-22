@@ -1,7 +1,20 @@
 # ============================================================
 # Projeto SNAKE - Assembly MIPS (MARS)
+# Grupo: (preencher com os nomes do grupo)
 # ============================================================
-# Abrir DUAS ferramentas (Tools) e clicar em "Connect to MIPS" em cada:
+# REGRAS
+#   - A cobra (azul) comeca com 1 celula em (0,0), parada, ate a primeira tecla.
+#   - W/A/S/D = cima/esquerda/baixo/direita. A cada 0,5 s ela anda 1 celula
+#     na ultima direcao escolhida.
+#   - Ao pegar a comida (verde) a cobra cresce 1 celula e a comida reaparece
+#     em outra celula livre.
+#   - Pontuacao: +1 a cada 0,5 s e +5 a cada comida.
+#   - Fim de jogo: bater na parede ou em qualquer parte do proprio corpo
+#     (inclusive voltar na direcao oposta). A pontuacao final aparece na aba
+#     Run I/O.
+#
+# COMO RODAR: abrir DUAS ferramentas (Tools) e clicar em "Connect to MIPS"
+# em cada uma, ANTES de montar (F3) e rodar (F5):
 #   - Bitmap Display (configuracao abaixo)
 #   - Keyboard and Display MMIO Simulator
 # Jogar digitando W/A/S/D na caixa de baixo do simulador de teclado
@@ -23,7 +36,7 @@
 .eqv COR_FUNDO 0x00000000       # preto (usado para apagar a cauda)
 .eqv PASSO_MS 500               # a cobra anda a cada 500 ms = 0,5 s
 .eqv KBD_CTRL 0xFFFF0000        # bit 0 = 1 quando ha uma tecla esperando
-.eqv KBD_DATA 0xFFFF0004        # codigo ASCII da tecla (ler limpa o bit 0)
+                                # (a tecla em si fica em KBD_CTRL + 4)
 
 .data
 # IMPORTANTE: o display ocupa 0x10010000..0x10010FFF.
@@ -106,6 +119,7 @@ game_over:
 #   4) grava a nova cabeca em cobra[0] e desenha
 # Nao anda se a direcao for (0,0) (nenhuma tecla apertada ainda).
 # Se a nova cabeca sair da grade (bateu na parede) -> game over.
+# Se a nova cabeca cair numa celula azul (corpo) -> game over.
 # Esse teste vem ANTES de desenhar: se desenhasse fora da grade, o sw
 # escreveria fora do display e estragaria as variaveis.
 # Registradores: $t5/$t6 = nova cabeca (desenha_celula nao mexe neles).
@@ -130,6 +144,19 @@ mover_cobra:
     beqz  $t2, game_over        # 0 = fora da grade: bateu na parede
     sltiu $t2, $t6, 32
     beqz  $t2, game_over
+
+    # bateu no proprio corpo? Olha a cor que o display ja tem na celula da
+    # nova cabeca: se for azul, ja tem cobra ali. Isso e feito ANTES de
+    # apagar a cauda e antes de desenhar a cabeca nova. Pela especificacao,
+    # encostar em QUALQUER parte do corpo (inclusive a ponta da cauda) e fim.
+    sll   $t7, $t6, 5           # mesmo calculo de endereco de desenha_celula
+    addu  $t7, $t7, $t5
+    sll   $t7, $t7, 2
+    la    $t8, display
+    addu  $t7, $t7, $t8
+    lw    $t9, 0($t7)           # cor atual da celula de destino
+    li    $t8, COR_COBRA
+    beq   $t9, $t8, game_over   # azul = corpo da cobra: game over
 
     # a nova cabeca caiu na comida?
     lw    $t2, comida_x
@@ -186,11 +213,11 @@ fim_mover:
     jr    $ra
 
 # ------------------------------------------------------------
-# ler_teclado -> $v0 = 1 se uma tecla W/A/S/D foi lida (e dir_x/dir_y
-#                       foram atualizados), $v0 = 0 caso contrario.
-# Teclado MMIO: o simulador escreve a tecla em KBD_DATA e poe 1 no
+# ler_teclado: se ha uma tecla W/A/S/D esperando, atualiza dir_x/dir_y.
+# Qualquer outra tecla (ou nenhuma) nao muda nada.
+# Teclado MMIO: o simulador escreve a tecla em KBD_CTRL + 4 e poe 1 no
 # bit 0 de KBD_CTRL. Nao ha interrupcao: o programa precisa PERGUNTAR
-# (polling) se tem tecla. Ler KBD_DATA zera o bit 0.
+# (polling) se tem tecla. Ler a tecla zera o bit 0.
 # ------------------------------------------------------------
 ler_teclado:
     li   $t1, KBD_CTRL
@@ -225,10 +252,7 @@ tecla_dir:
 grava_direcao:
     sw   $t4, dir_x
     sw   $t5, dir_y
-    li   $v0, 1                 # avisa: houve tecla valida
-    jr   $ra
 sem_tecla:
-    li   $v0, 0
     jr   $ra
 
 # ------------------------------------------------------------
@@ -263,8 +287,8 @@ fim_cobra:
 # (0), $a1 = limite; o resultado volta em $a0.
 # "Livre" = o pixel do display naquela celula ainda e preto (COR_FUNDO),
 # ou seja, nao tem cobra em cima. Se nao for, sorteia de novo.
-# ponytail: se o tabuleiro encher (cobra com 1024 celulas) isso nunca
-# termina; trate como "vitoria" se quiser.
+# Limitacao conhecida: se o tabuleiro encher (cobra com 1024 celulas)
+# isso nunca termina; seria o caso de tratar como "vitoria".
 # So faz um jal no final, entao usamos 'j' (tail call) e nao
 # precisamos salvar $ra: o 'jr $ra' de desenha_celula volta direto
 # para quem chamou nova_comida.
