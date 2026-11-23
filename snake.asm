@@ -100,7 +100,7 @@ game_over:
 # mover_cobra: anda 1 celula na direcao (dir_x, dir_y).
 #   1. calcula a nova cabeca (cabeca atual + direcao)
 #   2. confere parede e corpo (se bateu, game over)
-#   3. apaga a cauda, a menos que tenha comido a comida
+#   3. apaga a cauda (nesta branch a cobra nao cresce)
 #   4. empurra o vetor e coloca a nova cabeca no indice 0
 # Se a direcao for (0,0) nao faz nada (ainda nao apertou tecla).
 # $t5 e $t6 guardam a nova cabeca (desenha_celula so mexe em $t0 e $t1).
@@ -141,26 +141,16 @@ mover_cobra:
     li    $t8, COR_COBRA
     beq   $t9, $t8, game_over
 
-    # a nova cabeca caiu na comida?
-    lw    $t2, comida_x
-    lw    $t3, comida_y
+    # Nesta branch a cobra nao cresce: o tamanho nunca muda, entao a cauda
+    # (indice tamanho - 1) e apagada em todo passo, tendo comido ou nao.
     lw    $t4, tamanho
-    bne   $t5, $t2, sem_comer
-    bne   $t6, $t3, sem_comer
-    # comeu: nao apaga a cauda, so aumenta o tamanho
-    addiu $t4, $t4, 1
-    sw    $t4, tamanho
-    j     prepara_desloca
-sem_comer:
-    # nao comeu: apaga a cauda (indice tamanho - 1)
     addiu $t7, $t4, -1
     sll   $t7, $t7, 2
     lw    $a0, cobra_x($t7)
     lw    $a1, cobra_y($t7)
     li    $a2, COR_FUNDO
     jal   desenha_celula
-prepara_desloca:
-    addiu $t4, $t4, -1          # t4 = indice da cauda (ja com o tamanho novo)
+    addiu $t4, $t4, -1          # t4 = indice da cauda
 
     # empurra o corpo: for (i = cauda; i > 0; i--) cobra[i] = cobra[i-1]
 loop_desloca:

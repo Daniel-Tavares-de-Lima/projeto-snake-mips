@@ -25,7 +25,7 @@ Se o Bitmap Display ficar cortado na tela, estica a janela pra baixo até a áre
 
 A cobra (azul) começa com 1 célula em (0,0) e fica parada até a primeira tecla. W é cima, A é esquerda, S é baixo e D é direita. A cada 0,5 s ela anda 1 célula na última direção escolhida.
 
-Quando pega a comida (verde), a cobra cresce 1 célula e a comida aparece em outra célula livre. Cada passo vale 1 ponto e cada comida vale 5.
+Quando pega a comida (verde), a comida aparece em outra célula livre. Nesta branch (dev) a cobra não cresce e fica sempre com 1 célula. Cada passo vale 1 ponto e cada comida vale 5.
 
 O jogo acaba se a cabeça bater na parede ou em qualquer parte do corpo. Voltar na direção oposta conta, porque a cabeça entra no próprio corpo.
 
