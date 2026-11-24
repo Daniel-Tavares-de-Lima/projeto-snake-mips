@@ -78,7 +78,7 @@ loop_jogo:
 
     jal  mover_cobra            # se bater, ela mesma pula pra game_over
     j    loop_jogo
-##---
+
 # ------------------------------------------------------------
 # game_over: imprime a pontuacao e encerra o programa.
 # Ninguem volta daqui, entao quem pula pra ca nao precisa mexer na pilha.
@@ -98,10 +98,9 @@ game_over:
 
 # ------------------------------------------------------------
 # mover_cobra: anda 1 celula na direcao (dir_x, dir_y).
-#   1. calcula a nova cabeca (cabeca atual + direcao)
-#   2. confere parede e corpo (se bateu, game over)
-#   3. apaga a cauda, a menos que tenha comido a comida
-#   4. empurra o vetor e coloca a nova cabeca no indice 0
+# Calcula a nova cabeca e confere parede e corpo (bateu = game over).
+# Depois apaga a cauda, a menos que tenha comido, empurra o vetor
+# e coloca a nova cabeca no indice 0.
 # Se a direcao for (0,0) nao faz nada (ainda nao apertou tecla).
 # $t5 e $t6 guardam a nova cabeca (desenha_celula so mexe em $t0 e $t1).
 # ------------------------------------------------------------
